@@ -1,0 +1,180 @@
+---
+/** Sources and terms, after F1 Analysis's credits page, and the method. The
+ *  "what this cannot tell you" and "marks" sections were taken off at the
+ *  owner's request on 2026-10-06. */
+import Base from '@layouts/Base.astro';
+import { journey, river, landmarks, stations } from '@lib/data';
+
+const J = journey();
+const R = river();
+const LM = landmarks();
+const ST = stations().filter((s) => s.samples > 500);
+const off = J.settlements.filter((s) => !s.on_river);
+const on = J.settlements.filter((s) => s.on_river);
+const close = on.filter((s) => s.offset_km <= 1.2);
+const edge = on.filter((s) => s.offset_km > 1.2);
+/* The threshold's own sensitivity, computed rather than asserted: what the
+   nearest settlement outside the line would change if it were counted. */
+const nearestOut = off.reduce((a, b) => (a.offset_km < b.offset_km ? a : b));
+const lower = J.reaches[J.reaches.length - 1];
+const pctNow = Math.round((lower.people / J.people_on_river) * 100);
+const pctWith = Math.round(((lower.people + nearestOut.population) / (J.people_on_river + nearestOut.population)) * 100);
+
+const SOURCES = [
+  { name: 'LAWA and Waikato Regional Council', href: 'https://www.lawa.org.nz/download-data',
+    gives: 'Every water-quality measurement: thirteen sites on the river, sampled monthly, January 2004 to December 2024. River water quality monitoring data, North Island 3 of 3, published 9 February 2026.',
+    licence: 'CC BY 4.0', licenceHref: 'https://creativecommons.org/licenses/by/4.0/' },
+  { name: 'NIWA / Earth Sciences New Zealand — REC2', href: 'https://data-niwa.opendata.arcgis.com/datasets/NIWA::river-lines',
+    gives: 'The river network that every distance downstream is measured along, and its elevations.',
+    licence: 'CC BY-NC 4.0', licenceHref: 'https://creativecommons.org/licenses/by-nc/4.0/' },
+  { name: 'Stats NZ', href: 'https://tools.summaries.stats.govt.nz/',
+    gives: `Estimated resident population of every settlement on the river, June ${J.settlements[0].year}.`,
+    licence: 'CC BY 4.0', licenceHref: 'https://creativecommons.org/licenses/by/4.0/' },
+  { name: 'OpenStreetMap contributors', href: 'https://www.openstreetmap.org/copyright',
+    gives: `The map; the river the journey follows — the Waikato (relation ${J.osm_relation}), the Tongariro (relation ${J.osm_tongariro_relation}) and the streams off Ruapehu; and where each settlement is.`,
+    licence: 'ODbL', licenceHref: 'https://opendatacommons.org/licenses/odbl/' },
+  { name: 'OpenMapTiles and OpenFreeMap', href: 'https://openfreemap.org',
+    gives: 'The vector tiles the map is drawn from, restyled here. Served live from OpenFreeMap.',
+    licence: 'OpenMapTiles schema; OSM data under ODbL', licenceHref: 'https://openmaptiles.org/' },
+  { name: 'Waikato Regional Council', href: 'https://www.waikatoregion.govt.nz/environment/envirohub/',
+    gives: `Mean and extreme flows at four gauges on the lower river, read ${LM.flow_asof}.`,
+    licence: 'No terms published', licenceHref: null },
+  { name: 'Bill Vant, Waikato Regional Council, quoted by RNZ', href: 'https://shorthand.radionz.co.nz/the-dirty-truth-about-the-waikato-river/',
+    gives: 'Where the river’s nitrogen comes from: 61% from land use, mainly pastoral farming; 6% from town and industrial wastewater; 33% background.',
+    licence: 'Quoted and attributed', licenceHref: null },
+  { name: 'Bill Vant, Waikato Regional Council — Technical Report 2015/13', href: 'https://www.waikatoregion.govt.nz/services/publications/tr201513/',
+    gives: 'What takes the river’s clarity: algae about half the loss between the Taupō gates and Ngāruawāhia; below it, suspended silt about twice as important as algae. Visual clarity of the Waikato and Waipā Rivers, March 2015.',
+    licence: 'Quoted and attributed', licenceHref: null },
+  { name: 'Waikato Regional Council — Technical Report 2018/44', href: 'https://www.waikatoregion.govt.nz/services/publications/tr201844/',
+    gives: 'That the river’s algae are limited by its nutrients — the link between the nitrogen and phosphorus and the clarity. Nutrient limitation of algal biomass in the Waikato River.',
+    licence: 'Quoted and attributed', licenceHref: null },
+  { name: 'Watercare', href: 'https://www.watercare.co.nz/home/about-us/latest-news-and-media/new-water-treatment-plant-near-tuakau-about-to-go-live',
+    gives: 'Up to 225 million litres a day drawn from the river near Tuakau for Auckland (14 July 2021).',
+    licence: 'Quoted and attributed', licenceHref: null },
+  { name: 'Parliamentary Counsel Office', href: 'https://www.legislation.govt.nz/act/public/2010/24/en/latest/',
+    gives: 'The Waikato-Tainui Raupatu Claims (Waikato River) Settlement Act 2010 and Te Ture Whaimana, quoted on the journey.',
+    licence: 'CC BY 4.0', licenceHref: 'https://creativecommons.org/licenses/by/4.0/' },
+];
+---
+<Base title="Sources" description="The sources this site is built from, and how it uses them.">
+  <div class="wrap section">
+    <section>
+      <h1 class="headline">Sources</h1>
+      <div class="table-scroll" style="margin-top:1.4rem">
+        <table>
+          <thead><tr><th>Source</th><th>What it provides</th><th>Terms</th></tr></thead>
+          <tbody>
+            {SOURCES.map((s) => (
+              <tr>
+                <td><a href={s.href} rel="noopener">{s.name}</a></td>
+                <td class="measure">{s.gives}</td>
+                <td class="muted">{s.licenceHref ? <a href={s.licenceHref} rel="noopener license">{s.licence}</a> : s.licence}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p class="ui muted measure" style="margin-top:1.2rem">
+        Each stop on the journey names its own sources under its passage: NZHistory, Te Ara, the
+        Department of Conservation, NIWA, Waikato Regional Council, the Parliamentary Commissioner
+        for the Environment, Mercury, Ngā Taonga, Living Heritage and Love Taupō
+        among them.
+      </p>
+      <p class="ui muted measure" style="margin-top:.8rem">
+        REC2 is offered for non-commercial use only, so this site is non-commercial and has to stay
+        that way while it is built on it. Data sourced from LAWA (Land, Air, Water Aotearoa) and
+        Waikato Regional Council, available under the Creative Commons Attribution 4.0
+        International Licence.
+      </p>
+    </section>
+
+    <section style="margin-top:3.4rem">
+      <h2 class="title-lg">How the comparison is made</h2>
+      <div class="cols" style="margin-top:1rem">
+        <div>
+          <h3 class="title">Distance</h3>
+          <p class="ui muted">
+            Every measurement, settlement and dam is placed on one axis: kilometres downstream along
+            REC2’s mainstem, {R.length_km.toFixed(0)} km from Ruapehu to the sea. The journey starts at
+            REC2’s head, on the ice {R.source_elevation_m.toFixed(0)} m up, and follows OpenStreetMap’s
+            streams and river, which the map is drawn from, wherever they are mapped; across Lake Taupō
+            it takes a curve clear of the island, and for the last {Math.round(J.coast_km - J.osm_end_km)} km,
+            where OpenStreetMap maps the estuary only as water, it follows REC2’s line, smoothed. Every
+            point is filed under the same kilometres, and the two surveys agree on the river’s length
+            to within 1%.
+          </p>
+        </div>
+        <div>
+          <h3 class="title">People</h3>
+          <p class="ui muted">
+            A settlement counts as on the river if its centre is within {J.on_river_km} km of the
+            channel. {close.length} of them are within 1.2 km and not in question.
+            {edge.map((s) => `${s.name} is in at ${s.offset_km.toFixed(2)} km`).join('; ')}, and
+            {off.map((s) => `${s.name} (${s.offset_km.toFixed(2)} km)`).join(', ')} are out — so the line
+            does matter at its edge. Counting {nearestOut.name}, {nearestOut.population.toLocaleString('en-GB')} people,
+            would move the lower Waikato from {pctNow}% of the river’s people to {pctWith}%. That gives
+            {J.people_on_river.toLocaleString('en-GB')} people. Living near the river stands in for using
+            it; nothing here counts visits.
+          </p>
+        </div>
+        <div>
+          <h3 class="title">Nutrients and clarity</h3>
+          <p class="ui muted">
+            Medians of every sample at each of the {ST.length} sites, {ST[0].first.slice(0, 4)} to
+            {ST[ST.length - 1].last.slice(0, 4)}: total nitrogen and total phosphorus as multiples of the
+            Taupō control gates, and clarity as the distance a black disc stays visible through the
+            water. The gates have no clarity record, so clarity starts at Reids Farm, 900 m on. These are
+            concentrations, not loads: the river grows downstream, and the lower reach carries more
+            nutrient by weight than its concentration rise alone suggests. That clarity falls as the
+            nutrients rise is what the sites show together; why is Waikato Regional Council’s finding,
+            and it is part algae and part silt.
+          </p>
+        </div>
+        <div>
+          <h3 class="title">Colour</h3>
+          <p class="ui muted">
+            Nobody measures the river’s colour. The colour of the line on the map and of the water in the
+            chart is keyed to the clarity reading — blue where it is clear, green, then brown as it closes
+            in — following what WRC finds takes the clarity: algae above Ngāruawāhia, silt below. The
+            chart’s lines and the map’s colour are drawn as smooth curves between sites, because the
+            water changes along the river rather than at the stations; the curves never go beyond the
+            readings either side, and every number in the panel is one site’s reading. Below Tuakau, where nobody measures, the line keeps Tuakau’s colour: there is no
+            reading, and no reason to draw the water any clearer.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <hr class="rule" style="margin-top:3.4rem" />
+
+    {/* The same dedication as the README. */}
+    <section class="dedication" style="margin-top:2.6rem">
+      <h2 class="title-lg">Dedication</h2>
+      <div class="measure" style="margin-top:1rem">
+        <p>This is for the people who look after the Waikato.</p>
+        <p>
+          For the field staff who go out to the river every month so there is a record going back
+          decades. For the people in the labs who run the samples, the scientists who make sense of
+          them, and everyone at LAWA, Waikato Regional Council, NIWA and Stats NZ who publishes what
+          they find so that anyone can use it. For the river iwi, who are its kaitiaki and share in its
+          care. And for the people who write the region’s environmental policy, trying to do right by
+          everyone who depends on the river, in work that is slow, contested and rarely thanked. Every
+          number on this site is theirs.
+        </p>
+        <p>
+          And for my wife, who has spent more than twenty years in environmental monitoring and policy.
+          It isn’t always easy, and you do it to make a difference. It does. I see it, and I hope you
+          feel seen.
+        </p>
+      </div>
+    </section>
+  </div>
+</Base>
+
+<style>
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: clamp(24px, 4vw, 44px); }
+  .cols h3 { margin-bottom: .5em; }
+  .cols p { margin: 0; }
+  .dedication p { margin: 0; font-size: var(--ks-type-lead-size); line-height: 1.6; color: var(--ks-text); }
+  .dedication p + p { margin-top: .9em; }
+</style>

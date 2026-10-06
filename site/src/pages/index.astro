@@ -1,0 +1,144 @@
+---
+/** The landing page, in F1 Analysis's shape: what the subject is, one button
+ *  into the thing worth doing, the numbers on a hairline, and three short
+ *  paragraphs. The argument itself is made on the journey. */
+import Base from '@layouts/Base.astro';
+import { u } from '@lib/url';
+import { SITE_NAME } from '@lib/scope';
+import { journey, measures, stations } from '@lib/data';
+import { claritySeries } from '@lib/clarity';
+import { waterColour, metres as m } from '@lib/water';
+
+const J = journey();
+const M = measures();
+const ST = stations();
+const D = claritySeries(J, M);
+/* From REC2's head on Ruapehu, km 0, to the coast. */
+const ruapehuToSea = Math.round(J.coast_km);
+
+const int = (n: number) => n.toLocaleString('en-GB');
+const pct = (v: number) => `${Math.round(v * 100)}%`;
+const ham = J.settlements.find((s) => s.slug === 'hamilton')!;
+const hamShare = ham.population / J.people_on_river;
+const sites = ST.filter((s) => s.samples > 500);
+const first = sites[0], last = sites[sites.length - 1];
+const nX = D.top.n / D.base.n, pX = D.top.p / D.base.p;
+/* Hamilton's clarity is read at the Narrows, the site just above the city. */
+const narrows = M.find((m) => m.key === 'clarity')!.points.find((p) => p.site.includes('Narrows'))!;
+---
+<Base title={SITE_NAME}>
+  <div class="wrap section hero">
+    <p class="eyebrow">Waikato · New Zealand</p>
+    <h1 class="display" style="margin-top:.2em">The Waikato River</h1>
+    <p class="lead" style="margin-top:1.2em">
+      New Zealand’s longest river, from the ice on Ruapehu to the Tasman. Where it leaves Lake Taupō
+      you can see <span class="see" style={`color:${waterColour(D.base.c)}`}>{m(D.base.c)}</span> into it.
+      By Hamilton, home to {pct(hamShare)} of the people who live on it,
+      <span class="see" style={`color:${waterColour(narrows.median)}`}>{m(narrows.median)}</span>; by Tuakau,
+      <span class="see" style={`color:${waterColour(D.top.c)}`}>{m(D.top.c)}</span>. Over the same water,
+      nitrogen rises <span class="nw">{nX.toFixed(0)}-fold</span> and <span class="nw">phosphorus {pX.toFixed(0)}-fold.</span>
+    </p>
+    <div class="launch">
+      <a class="play plain" href={u('/journey/')}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" width="15" height="15"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>
+        <span>Take the journey</span>
+      </a>
+      <span class="ui muted">Ruapehu to the sea.</span>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <hr class="rule" />
+    <div class="stats">
+      <div class="stat"><div class="eyebrow">Ruapehu to the sea</div><div class="value num">{ruapehuToSea} km</div></div>
+      <div class="stat"><div class="eyebrow">Monitoring sites</div><div class="value num">{sites.length}</div></div>
+      <div class="stat"><div class="eyebrow">Sampled monthly</div><div class="value num">{first.first.slice(0, 4)}–{last.last.slice(0, 4)}</div></div>
+      <div class="stat"><div class="eyebrow">People on the river</div><div class="value num">{int(J.people_on_river)}</div></div>
+      <div class="stat"><div class="eyebrow">In Hamilton</div><div class="value num">{pct(hamShare)}</div></div>
+    </div>
+    <hr class="rule" />
+  </div>
+
+  <section class="wrap section more">
+    <div class="three-up">
+      <div>
+        <h2 class="eyebrow">Who lives on it</h2>
+        <p class="lead">
+          Hamilton holds {pct(hamShare)} of the people living within
+          {J.on_river_km} km of the river. From Wairākei to Ātiamuri no town stands on its banks at all.
+          It is dairy country, and north of Taupō tens of thousands of hectares of pine forest have
+          been turned into dairy farms.
+        </p>
+        <p class="src">
+          <a href="https://teara.govt.nz/en/volcanic-plateau-places/page-7" rel="noopener">Te Ara</a> ·
+          <a href="https://pce.parliament.nz/media/dgad2d2m/pce-water-quality-land-use-web-amended.pdf" rel="noopener">PCE, 2013</a>
+        </p>
+      </div>
+      <div>
+        <h2 class="eyebrow">What is in it</h2>
+        <p class="lead">
+          Nitrogen and phosphorus feed algae. Down to Ngāruawāhia algae take about
+          half the lost clarity; below, silt takes twice as much, and the water turns
+          from blue to green to brown. Of its nitrogen, 61% comes from land use, mainly pastoral
+          farming; 6% from towns and industry.
+        </p>
+        <p class="src">
+          <a href="https://www.waikatoregion.govt.nz/services/publications/tr201513/" rel="noopener">WRC TR 2015/13</a> ·
+          <a href="https://shorthand.radionz.co.nz/the-dirty-truth-about-the-waikato-river/" rel="noopener">WRC via RNZ</a>
+        </p>
+      </div>
+      <div>
+        <h2 class="eyebrow">Who drinks it</h2>
+        <p class="lead">
+          Up to 225 million litres a day are drawn near Tuakau for Auckland’s taps, a fifth of the
+          city’s water, from where nitrogen and phosphorus are highest and the water least clear.
+          Hamilton, Ngāruawāhia, Huntly, Te Kauwhata and towns in Waipā drink it too.
+        </p>
+        <p class="src">
+          <a href="https://www.watercare.co.nz/home/about-us/latest-news-and-media/new-water-treatment-plant-near-tuakau-about-to-go-live" rel="noopener">Watercare, 2021</a> ·
+          <a href="https://www.waikatoregion.govt.nz/community/whats-happening/news/no-cause-for-concern-after-slightly-elevated-levels-of-arsenic-detected-in-treated-waikato-river-water/" rel="noopener">WRC, 27 Nov 2024</a> ·
+          <a href="https://www.waikatoregion.govt.nz/community/whats-happening/news/two-more-water-suppliers-detect-slightly-elevated-arsenic/" rel="noopener">28 Nov 2024</a>
+        </p>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  /* The whole page — title, lead, numbers and the three paragraphs — fits one
+     laptop screen (a 13–14 inch MacBook, about 830 px of browser height)
+     without scrolling. So the vertical spacing and the title scale with the
+     window's height as well as its width, and give way first on a short one. */
+  .hero { padding-block: clamp(24px, 5vh, 72px) clamp(28px, 4.5vh, 64px); }
+  .hero .display { font-size: clamp(2.6rem, min(6vw, 9.5vh), var(--ks-type-display-size)); }
+  .hero .lead { margin-top: clamp(.6em, 2vh, 1.2em); max-width: 50em; }
+  .more { padding-block: clamp(24px, 4.5vh, 64px) clamp(16px, 2.5vh, 40px); }
+  .launch { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: clamp(1rem, 3vh, 2rem) 0 0; }
+  .play {
+    display: inline-flex; align-items: center; gap: 9px;
+    background: var(--ks-ink); color: var(--ks-paper);
+    border-radius: var(--ks-radius-pill);
+    padding: 10px 20px 10px 16px;
+    font-size: var(--ks-type-ui-size); letter-spacing: .04em;
+    transition: background var(--ks-quick) var(--ks-ease), transform var(--ks-quick) var(--ks-ease);
+  }
+  .play:hover { background: var(--ks-instrument-raised); transform: translateY(-1px); }
+  .play:focus-visible { outline: 2px solid var(--ks-patina-deep); outline-offset: 3px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: clamp(18px, 3vw, 40px); padding-block: clamp(16px, 2.6vh, 26px); }
+  .stat .value { font-size: clamp(1.15rem, 1.6vw, var(--ks-type-title-lg-size)); font-weight: 300; color: var(--ks-ink); line-height: 1.2; margin-top: 2px; }
+  /* The clarity figures in the colour that clarity makes the water, darkened
+     a little: the ramp is drawn for the dark map and is too light on paper. */
+  .see { font-weight: 600; filter: brightness(.82) saturate(1.15); white-space: nowrap; }
+  .three-up { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: clamp(24px, 4vw, 48px); }
+  .three-up .lead { margin-top: .7em; font-size: 1.0625rem; line-height: 1.55; }
+  /* Sources sit under each paragraph rather than in it, so the three read as
+     prose and come out the same length. */
+  .src { margin: .7em 0 0; font-size: var(--ks-type-label-size); color: var(--ks-text-faint); }
+  .src a { color: inherit; }
+  .src a:hover { color: var(--ks-ink); }
+  /* No widow of a number at the end of the lead. */
+  .lead { text-wrap: pretty; }
+  .nw { white-space: nowrap; }
+  @media (prefers-reduced-motion: reduce) { .play:hover { transform: none; } }
+</style>

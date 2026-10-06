@@ -1,0 +1,152 @@
+---
+/** Nutrients against clarity, drawn as the water itself.
+ *
+ *  A surface line across the middle. Above it, nitrogen and phosphorus rise as
+ *  multiples of what left Taupō. Below it, the clarity: a band of water as deep
+ *  as you can see through it, shaded in the colour that clarity makes it
+ *  (lib/water.ts) — deep and blue at the top of the river, shallow and brown at
+ *  the bottom. As the lines above climb, the water below closes in.
+ *
+ *  All three are smooth curves through the sites (lib/curve.ts), because the
+ *  water changes along each stretch, not at the station that measures it.
+ *
+ *  The journey reveals it: everything is drawn faint, and a clip uncovers it
+ *  kilometre by kilometre as the boat goes, with a cursor at the boat.
+ */
+import type { ClaritySeries } from '@lib/clarity';
+import { waterColour } from '@lib/water';
+import { slopes, pathD } from '@lib/curve';
+
+interface Props { series: ClaritySeries; label?: string; }
+const { series: S, label = 'Nitrogen and phosphorus rising against water clarity falling, along the river' } = Astro.props;
+
+/* The chart is drawn 600 units wide and shown about 350 px wide in the panel,
+   so type is set at about 1.7× the size it should read at. */
+const W = 600;
+const L = 58, R = 14, T = 46, B = 32;
+const HT = 92, HB = 104;             // height above the surface, and below it
+const H = T + HT + HB + B;
+const SURF = T + HT;
+const N_MAX = 16, C_MAX = 8;
+
+const X = (km: number) => L + ((km - S.x0) / (S.x1 - S.x0)) * (W - L - R);
+const YN = (v: number) => SURF - (v / N_MAX) * HT;
+const YC = (m: number) => SURF + (Math.min(m, C_MAX) / C_MAX) * HB;
+const f = (n: number) => n.toFixed(1);
+
+/** Each measure as a curve from its first site to its last, then held flat to
+ *  the sea. Nobody measures below Tuakau, and there is no reason to think the
+ *  water gets any better on the way out; a flat line says that simply. */
+const curve = (pts: [number, number][], y: (v: number) => number) =>
+  pathD(pts, slopes(pts), X, y) + `H${f(X(S.x1))}`;
+
+/* The clarity band: down from the surface at the first site, along the curve,
+   and back up to the surface at the last, filled with a left-to-right gradient
+   that passes through each site's colour at that site. */
+const cl = S.clarity;
+const cFirst = cl[0][0], cLast = cl[cl.length - 1][0];
+const band = `M${f(X(cFirst))} ${SURF}` + pathD(cl, slopes(cl), X, YC, true) + `H${f(X(S.x1))}V${SURF}Z`;
+const stops = cl.map(([km, m]) => ({ at: (X(km) - X(cFirst)) / (X(cLast) - X(cFirst)), colour: waterColour(m) }));
+
+/* Short names over the chart, which has little room for them. */
+const SHORT: Record<string, string> = { 'Upper Waikato': 'Upper', 'Cambridge and Hamilton': 'Hamilton', 'Lower Waikato': 'Lower' };
+---
+<figure class="clarity" data-clarity
+        data-x0={S.x0} data-x1={S.x1} data-l={L} data-r={W - R}>
+  <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
+    <defs>
+      <clipPath id="clarity-clip"><rect data-clip x="0" y="0" width={L} height={H} /></clipPath>
+      <linearGradient id="clarity-fill" gradientUnits="userSpaceOnUse" x1={f(X(cFirst))} x2={f(X(cLast))} y1="0" y2="0">
+        {stops.map((s) => <stop offset={s.at.toFixed(4)} stop-color={s.colour} />)}
+      </linearGradient>
+    </defs>
+
+    {/* The upper and lower river named over their stretches, and Hamilton as
+        a dotted line through the chart at the city's centre, named above it. */}
+    {S.reaches.map((r, i) => {
+      const mid = i === 1 ? X(S.hamiltonKm) : (X(r.from) + X(r.to)) / 2;
+      return <text x={f(mid)} y={T - 18} class="reach-label" text-anchor="middle">{SHORT[r.name] ?? r.name}</text>;
+    })}
+    <line x1={f(X(S.hamiltonKm))} x2={f(X(S.hamiltonKm))} y1={T - 8} y2={H - B} class="city" />
+
+    {[5, 10, 15].map((v) => (
+      <g>
+        <line x1={L} x2={W - R} y1={f(YN(v))} y2={f(YN(v))} class="grid" />
+        <text x={L - 9} y={f(YN(v))} class="axis" text-anchor="end" dominant-baseline="middle">×{v}</text>
+      </g>
+    ))}
+    {[2, 4, 6, 8].map((m) => (
+      <text x={L - 9} y={f(YC(m))} class="axis" text-anchor="end" dominant-baseline="middle">{m} m</text>
+    ))}
+
+    {['ghost', 'live'].map((layer) => (
+      <g class={layer} clip-path={layer === 'live' ? 'url(#clarity-clip)' : undefined}>
+        <path d={band} fill="url(#clarity-fill)" class="column" />
+        <path d={curve(S.clarity, YC)} class="line clarity-edge" />
+        <path d={curve(S.phosphorus, YN)} class="line phosphorus" />
+        <path d={curve(S.nitrogen, YN)} class="line nitrogen" />
+      </g>
+    ))}
+
+    <line x1={L} x2={W - R} y1={SURF} y2={SURF} class="surface" />
+
+    <g data-cursor>
+      <line x1={L} x2={L} y1={T - 8} y2={H - B} class="cursor" />
+      <circle data-dot="nitrogen" cx={L} cy={SURF} r="4.6" class="dot nitrogen" />
+      <circle data-dot="phosphorus" cx={L} cy={SURF} r="4.6" class="dot phosphorus" />
+      {/* The black disc a clarity reading is taken with, at the depth it vanishes. */}
+      <g data-disc transform={`translate(${L} ${SURF})`}>
+        <circle r="6.5" class="disc" />
+        <path d="M0 -6.5A6.5 6.5 0 0 1 0 6.5Z" class="disc-half" />
+      </g>
+    </g>
+
+    {[200, 300, 400].filter((k) => k > S.x0 && k < S.x1).map((k) => (
+      <text x={f(X(k))} y={H - 6} class="axis" text-anchor="middle">{k} km</text>
+    ))}
+  </svg>
+  <figcaption class="key">
+    <span class="k nitrogen">Nitrogen</span>
+    <span class="k phosphorus">Phosphorus</span>
+    <span class="k clarity">Clarity</span>
+  </figcaption>
+  <script is:inline type="application/json" data-series set:html={JSON.stringify({
+    nitrogen: S.nitrogen, phosphorus: S.phosphorus, clarity: S.clarity, lastKm: S.lastKm,
+    surf: SURF, ht: HT, hb: HB, nMax: N_MAX, cMax: C_MAX,
+  })} />
+</figure>
+
+<style>
+  .clarity { margin: 0; }
+  .clarity svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+  .city { stroke: oklch(100% 0 0 / 0.35); stroke-width: 1.4; stroke-dasharray: 1.5 4.5; stroke-linecap: round; }
+  .grid { stroke: oklch(100% 0 0 / 0.08); stroke-width: 1; }
+  /* In chart units: about 10.5 px on screen at the panel's width. */
+  .axis, .reach-label {
+    font-family: var(--ks-mono), monospace; font-size: 18px; letter-spacing: .06em;
+    text-transform: uppercase; fill: var(--ks-instrument-muted);
+  }
+  .reach-label { font-size: 17px; letter-spacing: .05em; }
+  .surface { stroke: oklch(100% 0 0 / 0.42); stroke-width: 1; }
+
+  .column { opacity: .78; }
+  .line { fill: none; stroke-width: 2.6; stroke-linejoin: round; stroke-linecap: round; }
+  .line.nitrogen { stroke: #ff8a5b; }
+  .line.phosphorus { stroke: #c792ea; }
+  .line.clarity-edge { stroke: oklch(100% 0 0 / 0.55); stroke-width: 1.2; }
+  .ghost { opacity: .16; }
+
+  .cursor { stroke: var(--ks-instrument-muted); stroke-width: 1; stroke-dasharray: 2 3; }
+  .dot { stroke: var(--ks-instrument-deep); stroke-width: 1.5; }
+  .dot.nitrogen { fill: #ff8a5b; }
+  .dot.phosphorus { fill: #c792ea; }
+  .disc { fill: #f4f4f4; stroke: var(--ks-instrument-deep); stroke-width: 1.5; }
+  .disc-half { fill: #111; }
+
+  .key { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 12px; color: var(--ks-instrument-muted); }
+  .k::before { content: ''; display: inline-block; width: 12px; height: 2px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+  .k.nitrogen::before { background: #ff8a5b; }
+  .k.phosphorus::before { background: #c792ea; }
+  .k.clarity::before { height: 8px; width: 12px; background: linear-gradient(90deg, #2e9bf0, #46b58a, #b39a48, #a8763e); }
+</style>

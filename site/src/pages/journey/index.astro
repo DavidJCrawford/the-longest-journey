@@ -1,0 +1,1144 @@
+---
+/** The journey.
+ *
+ *  F1 Analysis's replay, turned into a map: a full-screen instrument with a thin
+ *  bar above and below, the stage between them, and nothing on the stage that is
+ *  not about the subject. Where the replay follows the race leader round a lap,
+ *  this follows a boat from Ruapehu to the Tasman, and the running order is
+ *  replaced by a ledger: the nutrients the river has gathered, against how far
+ *  down into it you can still see.
+ *
+ *  The map is laid out like any web map — the stage fills the window, north is
+ *  up — but it is not one you drive. There is play and there is pause. The
+ *  camera is the journey's.
+ */
+import Base from '@layouts/Base.astro';
+import ClarityChart from '@components/ClarityChart.astro';
+import Logo from '@components/Logo.astro';
+import { u } from '@lib/url';
+import { journey, measures, stations, landmarks, river } from '@lib/data';
+import { claritySeries } from '@lib/clarity';
+import { CHAPTERS } from '@lib/chapters';
+import { waterColour, metres } from '@lib/water';
+
+const J = journey();
+const M = measures();
+const ST = stations();
+const LM = landmarks();
+const D = claritySeries(J, M);
+
+const KEYS = ['total_nitrogen', 'total_phosphorus', 'clarity'] as const;
+
+/* Everything the client needs, in one block, read once. */
+const payload = {
+  line: J.line,
+  coast: J.coast_km,
+  people: J.people_on_river,
+  settlements: J.settlements.map((s) => ({ name: s.name, km: s.km, pop: s.population, on: s.on_river, ll: [s.lon, s.lat] })),
+  sites: ST.filter((s) => s.samples > 500).map((s) => ({ name: s.site.replace('Waikato River at ', '').replace('Waikato at ', ''), km: s.km, ll: [s.lon, s.lat] })),
+  dams: LM.dams.map((d) => ({ name: d.name.replace(' Dam', ''), km: d.km, ll: [d.lon, d.lat] })),
+  measures: Object.fromEntries(KEYS.map((k) => {
+    const m = M.find((x) => x.key === k)!;
+    return [k, m.points.map((p) => ({ km: p.km, v: p.median, site: p.site.replace('Waikato River at ', '').replace('Waikato at ', '') }))];
+  })),
+  base: D.base, lastKm: D.lastKm,
+  reaches: D.reaches.map((r) => ({ name: r.name, span: r.span, from: r.from, to: r.to })),
+  notes: CHAPTERS.map((c) => ({ km: c.km, eyebrow: c.eyebrow, title: c.title, body: c.body, sources: c.sources ?? [] })),
+  summit: J.summit, sourceM: Math.round(river().source_elevation_m),
+  upperNames: J.upper_names,
+  home: u('/'),
+};
+---
+<Base title="Journey" description="Down the Waikato River from Ruapehu to the Tasman, on the map." chrome={false}>
+  <div class="journey" data-journey>
+    <header class="bar top">
+      <div class="id">
+        <a class="plain home" href={u('/')} aria-label="The Longest Journey: home"><Logo size="20px" /></a>
+        <span class="mono">Journey</span>
+        <span class="title">Waikato River</span>
+      </div>
+      <div class="readout mono num" data-readout>Ruapehu</div>
+      <a class="icon plain" href={u('/')} aria-label="Leave the journey">✕</a>
+    </header>
+
+    <div class="stage">
+      <div class="map" data-map role="img" aria-label="Map of the Waikato River, following a boat downstream"></div>
+      <p class="loading mono" data-loading>Loading the river…</p>
+
+      <aside class="panel" aria-label="The river so far">
+        <section class="where">
+          <p class="mono">Kilometre</p>
+          <p class="km num" data-km>—</p>
+          <p class="place" data-place>Ruapehu</p>
+        </section>
+
+        <section class="ledger">
+          <div class="fig nitrogen">
+            <p class="mono">Nitrogen</p>
+            <p class="big num" data-n>—</p>
+            <p class="sub num" data-n-sub>&nbsp;</p>
+          </div>
+          <div class="fig phosphorus">
+            <p class="mono">Phosphorus</p>
+            <p class="big num" data-p>—</p>
+            <p class="sub num" data-p-sub>&nbsp;</p>
+          </div>
+          <div class="fig clarity">
+            <p class="mono">Clarity</p>
+            <p class="big num" data-c>—</p>
+            <p class="sub num" data-c-sub>&nbsp;</p>
+          </div>
+          <p class="measured mono" data-site>&nbsp;</p>
+        </section>
+
+        <section class="chart">
+          <ClarityChart series={D} label="Nitrogen and phosphorus rising against water clarity falling, revealed as the journey goes" />
+        </section>
+
+        <section class="verdicts">
+          <p class="mono">Reach by reach</p>
+          <ol data-verdicts>
+            {D.reaches.map((r, i) => (
+              <li data-verdict={i} hidden>
+                <span class="rn">{r.name}</span>
+                <span class="rv num">nitrogen <b class="n">×{(r.n[1] / r.n[0]).toFixed(1)}</b> · phosphorus <b class="p">×{(r.p[1] / r.p[0]).toFixed(1)}</b></span>
+                <span class="rv num">clarity <b class="c" style={`color:${waterColour(r.c[1])}`}>{metres(r.c[0]).replace(' m', '')} → {metres(r.c[1])}</b></span>
+              </li>
+            ))}
+          </ol>
+          <p class="pending ui" data-pending>{D.reaches[0].name} · {D.reaches[0].span}</p>
+        </section>
+
+        <p class="attrib">
+          Down to Ngāruawāhia, algae fed by the nutrients take about half the lost clarity; below it,
+          silt about twice as much. <a href="https://www.waikatoregion.govt.nz/services/publications/tr201513/" rel="noopener">WRC TR 2015/13</a>.
+          61% of the river’s nitrogen comes from land use, mainly pastoral farming; 6% from towns and
+          industry. <a href="https://shorthand.radionz.co.nz/the-dirty-truth-about-the-waikato-river/" rel="noopener">WRC, via RNZ</a>.
+        </p>
+      </aside>
+    </div>
+
+    <div class="bar controls">
+      <button class="icon wide" type="button" data-play aria-label="Play">▶</button>
+      <div class="progress" data-scrub role="slider" tabindex="0"
+           aria-label="Position along the river" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Ruapehu">
+        <div class="rail"><span data-progress></span></div>
+        <span class="thumb" data-thumb></span>
+      </div>
+      <span class="mono num pct" data-pct>0%</span>
+      <a class="ui sources plain" href={u('/sources/')}>Sources</a>
+    </div>
+
+    {/* The stops. The journey slows to a halt at each place, and the place's
+        passage fades in over everything; the button sends the boat on. The
+        script fills it; the shell is here so the styles reach it. */}
+    <div class="scrim" data-scrim></div>
+    <div class="modal" data-modal role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-hidden="true">
+      <span class="tint" data-tint></span>
+      <div class="modal-scroll" data-modal-body></div>
+      <div class="modal-foot">
+        <label class="auto">
+          <input type="checkbox" data-autoplay />
+          <span class="box" aria-hidden="true"></span>
+          <span class="mono">Autoplay</span>
+        </label>
+        <button type="button" class="go" data-go>
+          <span data-go-label>Begin the journey</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true" width="13" height="13"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>
+        </button>
+      </div>
+      <span class="timer" data-timer><span data-timer-fill></span></span>
+    </div>
+  </div>
+
+  <script type="application/json" data-payload set:html={JSON.stringify(payload)} />
+</Base>
+
+<style>
+  .journey {
+    position: fixed; inset: 0;
+    display: grid; grid-template-rows: auto 1fr auto;
+    background: var(--ks-instrument-deep); color: var(--ks-instrument-text);
+    color-scheme: dark;
+  }
+
+  /* ── The two bars: F1's replay, line for line ─────────────────────────── */
+  .bar { display: flex; align-items: center; gap: 16px; padding: 12px clamp(14px, 3vw, 28px); background: var(--ks-instrument-deep); }
+  .top { border-bottom: 1px solid var(--ks-instrument-rule); }
+  .controls { border-top: 1px solid var(--ks-instrument-rule); }
+  .id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .home { display: block; border-radius: 50%; }
+  .home:focus-visible { outline: 2px solid var(--ks-patina); outline-offset: 3px; }
+  .id .mono { color: var(--ks-instrument-muted); letter-spacing: .14em; }
+  /* `.title` is also a utility class in base.css that sets ink-on-paper, which
+     on this bar is black on black. Named in full here so it cannot win. */
+  .id .title { font-weight: 600; font-size: var(--ks-type-title-size); color: var(--ks-instrument-text); }
+  .readout { margin-left: auto; color: var(--ks-instrument-muted); letter-spacing: .06em; text-transform: none; }
+
+  .icon {
+    display: inline-grid; place-items: center;
+    background: transparent; color: var(--ks-instrument-text);
+    border: 1px solid var(--ks-instrument-rule); border-radius: var(--ks-radius-sm);
+    min-width: 34px; height: 30px; cursor: pointer; font: inherit; font-size: 12px;
+    transition: border-color var(--ks-quick) var(--ks-ease), background var(--ks-quick) var(--ks-ease);
+  }
+  .icon:hover { border-color: var(--ks-instrument-muted); background: var(--ks-instrument); }
+  .icon:focus-visible { outline: 2px solid var(--ks-patina); outline-offset: 2px; }
+  .icon.wide { min-width: 46px; }
+
+  /* The progress bar is also the scrubber: a hairline to look at, with a hit
+     area tall enough to grab, and a thumb that grows when it is. */
+  .progress { flex: 1; position: relative; height: 24px; display: flex; align-items: center; cursor: pointer; touch-action: none; border-radius: 4px; }
+  .progress:focus-visible { outline: 2px solid var(--ks-patina); outline-offset: 2px; }
+  .rail { width: 100%; height: 3px; border-radius: 3px; background: var(--ks-instrument-rule); overflow: hidden; transition: height var(--ks-quick) var(--ks-ease); }
+  .rail span { display: block; height: 100%; width: 0; background: var(--ks-kinpaku); }
+  .progress:hover .rail, .progress.dragging .rail { height: 5px; }
+  .thumb {
+    position: absolute; top: 50%; left: 0; width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px;
+    border-radius: 50%; background: var(--ks-kinpaku); box-shadow: 0 0 0 3px oklch(0% 0 0 / 0.45);
+    transform: scale(.7); transition: transform var(--ks-quick) var(--ks-ease); pointer-events: none;
+  }
+  .progress:hover .thumb, .progress:focus-visible .thumb, .progress.dragging .thumb { transform: scale(1); }
+  .pct { color: var(--ks-instrument-muted); min-width: 3.4em; text-align: right; }
+  .sources { color: var(--ks-instrument-muted); letter-spacing: .08em; text-transform: uppercase; font-size: var(--ks-type-label-size); }
+  .sources:hover { color: var(--ks-instrument-text); }
+
+  /* ── The stage ────────────────────────────────────────────────────────── */
+  .stage { position: relative; overflow: hidden; background: #171717; }
+  .map { position: absolute; inset: 0; }
+  .loading {
+    position: absolute; inset: 0; display: grid; place-items: center; margin: 0;
+    color: var(--ks-instrument-muted); letter-spacing: .14em; pointer-events: none;
+  }
+  .loading[hidden] { display: none; }
+
+  /* ── The panel ────────────────────────────────────────────────────────────
+     Over the right of the stage, the way a web map's side panel sits, so the
+     map still runs edge to edge behind it. Deep, slightly translucent, blurred:
+     present without being a wall. */
+  .panel {
+    position: absolute; top: 14px; right: 14px; bottom: 14px;
+    width: min(392px, calc(100% - 28px));
+    overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+    background: oklch(15% 0 0 / 0.86);
+    backdrop-filter: blur(14px) saturate(1.2);
+    border: 1px solid var(--ks-instrument-rule); border-radius: 12px;
+    padding: 16px 18px 14px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .panel section + section { border-top: 1px solid var(--ks-instrument-rule); padding-top: 11px; }
+  .panel .mono { margin: 0; color: var(--ks-instrument-muted); letter-spacing: .14em; font-size: 10px; }
+
+  .where .km {
+    margin: 2px 0 0;
+    font-family: var(--ks-font-display), sans-serif; font-weight: 200;
+    font-size: 3.5rem; line-height: .95; color: var(--ks-instrument-text);
+  }
+  .where .place { margin: 6px 0 0; font-weight: 600; font-size: var(--ks-type-title-size); }
+
+  .ledger { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 12px; }
+  .fig .big {
+    margin: 4px 0 0;
+    font-family: var(--ks-font-display), sans-serif; font-weight: 300;
+    font-size: 1.9rem; line-height: 1;
+  }
+  .nitrogen .big { color: #ff8a5b; }
+  .phosphorus .big { color: #c792ea; }
+  /* Clarity takes the colour of the water it is measuring; the script sets it. */
+  .clarity .big { color: #2e9bf0; transition: color .8s var(--ks-ease); }
+  .fig .sub { margin: 4px 0 0; font-size: var(--ks-type-label-size); color: var(--ks-instrument-muted); }
+  .ledger .measured { grid-column: 1 / -1; letter-spacing: .06em; text-transform: none; font-size: 10px; }
+
+  .chart { margin-inline: -4px; }
+
+  .verdicts ol { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 7px; }
+  .verdicts li { display: grid; grid-template-columns: 1fr auto; gap: 1px 10px; font-size: var(--ks-type-ui-size); animation: rise .5s var(--ks-ease); }
+  .verdicts li[hidden] { display: none; }
+  .verdicts .rn { grid-row: span 2; font-weight: 600; align-self: center; }
+  .verdicts .rv { color: var(--ks-instrument-muted); text-align: right; font-size: var(--ks-type-label-size); }
+  .verdicts b { font-weight: 700; }
+  .verdicts b.n { color: #ff8a5b; }
+  .verdicts b.p { color: #c792ea; }
+  .pending { margin: 8px 0 0; color: var(--ks-instrument-muted); }
+  @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  .attrib { margin: auto 0 0; padding-top: 12px; border-top: 1px solid var(--ks-instrument-rule); font-size: 10.5px; line-height: 1.45; color: var(--ks-instrument-muted); }
+  .attrib a { text-decoration-color: var(--ks-instrument-rule); }
+  .attrib a:hover { color: var(--ks-instrument-text); }
+
+  /* ── The stops ────────────────────────────────────────────────────────────
+     A dimmed stage and a card in the middle of it. Both fade; the card also
+     settles a few pixels as it arrives. `visibility` waits for the fade out to
+     finish before it hides the card, so leaving is as smooth as arriving. */
+  .scrim {
+    position: absolute; inset: 0; z-index: 20;
+    background: oklch(8% 0 0 / 0.5);
+    opacity: 0; visibility: hidden;
+    transition: opacity .7s var(--ks-ease), visibility 0s linear .7s;
+  }
+  .scrim.open { opacity: 1; visibility: visible; transition: opacity .7s var(--ks-ease), background-color .9s var(--ks-ease); }
+  .scrim.light { background: oklch(8% 0 0 / 0.22); }
+  .modal {
+    position: absolute; left: 50%; top: 50%; z-index: 21;
+    width: min(600px, calc(100% - 32px)); max-height: calc(100% - 48px);
+    display: flex; flex-direction: column; overflow: hidden;
+    background: oklch(14% 0 0 / 0.96);
+    border: 1px solid var(--ks-instrument-rule); border-radius: 14px;
+    box-shadow: 0 30px 90px oklch(0% 0 0 / 0.55);
+    opacity: 0; visibility: hidden;
+    transform: translate(-50%, calc(-50% + 12px)) scale(.985);
+    transition: opacity .7s var(--ks-ease), transform .7s var(--ks-ease), visibility 0s linear .7s;
+  }
+  .modal.open {
+    opacity: 1; visibility: visible; transform: translate(-50%, -50%);
+    transition: opacity .7s var(--ks-ease), transform .7s var(--ks-ease), height .55s var(--ks-ease);
+  }
+  .modal-scroll, .modal-foot { transition: opacity .38s var(--ks-ease); }
+  .modal.fading .modal-scroll, .modal.fading .modal-foot { opacity: 0; }
+  /* A rule along the top in the colour of the water at this place. */
+  .tint { flex: none; height: 3px; background: #2e9bf0; transition: background .8s var(--ks-ease); }
+  .modal-scroll { overflow-y: auto; overscroll-behavior: contain; padding: 26px 30px 10px; scrollbar-width: thin; }
+  /* Filled by the script, so reached with :global — Astro's scoping attribute
+     never lands on elements made at run time. */
+  .modal-scroll :global(.ch + .ch) { margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--ks-instrument-rule); }
+  .modal-scroll :global(.ch-eyebrow) { margin: 0; font: 500 10.5px var(--ks-mono), monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--ks-instrument-muted); }
+  .modal-scroll :global(h2) {
+    margin: 6px 0 14px; color: var(--ks-instrument-text);
+    font-family: var(--ks-font-display), sans-serif; font-weight: 300;
+    font-size: clamp(1.55rem, 2.6vw, 2.15rem); line-height: 1.1;
+  }
+  .modal-scroll :global(.ch-p) { margin: 0; font-size: 1rem; line-height: 1.62; color: oklch(86% 0 0); }
+  .modal-scroll :global(.ch-p + .ch-p) { margin-top: .8em; }
+  .modal-scroll :global(.ch-p strong) { font-weight: 700; color: #fff; }
+  .modal-scroll :global(.ch-src) { margin: 14px 0 0; font-size: var(--ks-type-label-size); line-height: 1.5; color: var(--ks-instrument-muted); }
+  .modal-scroll :global(.ch-src a) { color: inherit; text-decoration-color: var(--ks-instrument-rule); }
+  .modal-scroll :global(.ch-src a:hover) { color: var(--ks-instrument-text); }
+
+  .modal-foot {
+    flex: none; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 16px;
+    padding: 16px 30px 20px; border-top: 1px solid var(--ks-instrument-rule);
+  }
+  .go {
+    display: inline-flex; align-items: center; gap: 10px; margin-left: auto;
+    background: var(--ks-instrument-text); color: var(--ks-instrument-deep);
+    border: 0; border-radius: var(--ks-radius-pill); padding: 11px 20px 11px 22px; cursor: pointer;
+    font: 600 11.5px var(--ks-mono), monospace; letter-spacing: .16em; text-transform: uppercase;
+    transition: background var(--ks-quick) var(--ks-ease), transform var(--ks-quick) var(--ks-ease);
+  }
+  .go:hover { background: #fff; transform: translateY(-1px); }
+  .go:focus-visible { outline: 2px solid var(--ks-patina); outline-offset: 3px; }
+
+  .auto { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; }
+  .auto .mono { color: var(--ks-instrument-muted); letter-spacing: .14em; font-size: 10.5px; }
+  .auto input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+  .box {
+    position: relative; width: 16px; height: 16px; border-radius: 4px;
+    border: 1.5px solid var(--ks-instrument-muted);
+    transition: background var(--ks-quick) var(--ks-ease), border-color var(--ks-quick) var(--ks-ease);
+  }
+  .auto input:checked + .box { background: var(--ks-kinpaku); border-color: var(--ks-kinpaku); }
+  .auto input:checked + .box::after {
+    content: ''; position: absolute; left: 4.5px; top: 1px; width: 4px; height: 8px;
+    border: solid var(--ks-instrument-deep); border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+  .auto input:focus-visible + .box { outline: 2px solid var(--ks-patina); outline-offset: 2px; }
+  .auto:hover .mono { color: var(--ks-instrument-text); }
+
+  /* Autoplay's countdown, along the bottom edge. */
+  .timer { flex: none; height: 3px; background: oklch(100% 0 0 / 0.06); visibility: hidden; }
+  .timer.on { visibility: visible; }
+  .timer span { display: block; height: 100%; background: var(--ks-kinpaku); transform-origin: left; }
+
+  /* ── Markers drawn by the script ──────────────────────────────────────── */
+  :global(.town) { pointer-events: none; transform: translateY(-50%); }
+  :global(.town span) { display: block; white-space: nowrap; text-shadow: 0 1px 8px #000, 0 0 2px #000; }
+  :global(.town .n) { font: 600 12px var(--ks-font), sans-serif; color: #f2e6cc; }
+  :global(.town .p) { font: 500 10px var(--ks-mono), monospace; letter-spacing: .08em; color: #ffba00; }
+  :global(.town.off .n) { color: var(--ks-instrument-muted); font-weight: 500; }
+  :global(.town.off .p) { color: var(--ks-instrument-muted); }
+  :global(.site-tag) { pointer-events: none; font: 500 9px var(--ks-mono), monospace; letter-spacing: .1em; text-transform: uppercase; color: #bfe9ee; text-shadow: 0 1px 6px #000; white-space: nowrap; }
+  :global(.peak) { pointer-events: none; text-align: center; }
+  :global(.peak::after) { content: ''; display: block; margin: 3px auto 0; width: 0; height: 0;
+    border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 7px solid #e8e8e8; }
+  :global(.peak .n) { font: 600 12px var(--ks-font), sans-serif; letter-spacing: .02em; color: #f2f2f2; text-shadow: 0 1px 8px #000, 0 0 2px #000; }
+  :global(.source-tag) { color: #8fd0ff; }
+  :global(.dam-tag) { pointer-events: none; font: 500 9px var(--ks-mono), monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--ks-instrument-muted); text-shadow: 0 1px 6px #000; white-space: nowrap; }
+  :global(.maplibregl-ctrl-attrib) { background: oklch(15% 0 0 / 0.7) !important; color: var(--ks-instrument-muted) !important; font-size: 10px !important; }
+  :global(.maplibregl-ctrl-attrib a) { color: var(--ks-instrument-muted) !important; }
+  :global(.maplibregl-ctrl-attrib-button) { filter: invert(1); }
+
+  /* A phone held upright: the panel becomes a sheet along the bottom and the
+     chart, the part most worth seeing, keeps its place in it. */
+  @media (max-width: 760px) {
+    /* On a phone the sheet keeps the place, the three figures and the chart —
+       the comparison itself — and lets the rest go. The sources are one tap
+       away in the bar below. */
+    .panel { top: auto; left: 10px; right: 10px; bottom: 10px; width: auto; max-height: 60%; padding: 12px 14px; gap: 10px; }
+    .where { display: flex; align-items: baseline; gap: 12px; }
+    .where > .mono { display: none; }
+    .where .km { font-size: 2.2rem; }
+    .where .place { margin: 0; }
+    .fig .big { font-size: 1.5rem; }
+    .ledger .measured, .verdicts, .attrib { display: none; }
+    .modal-scroll { padding: 20px 20px 8px; }
+    .modal-foot { padding: 14px 20px 16px; }
+    .go { letter-spacing: .12em; padding: 10px 16px 10px 18px; }
+    .readout { display: none; }
+    .id .title { white-space: nowrap; }
+    :global(.maplibregl-ctrl-bottom-left) { bottom: auto; top: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .verdicts li { animation: none; } .clarity .big { transition: none; }
+    .scrim, .scrim.open, .modal, .modal.open, .modal-scroll, .modal-foot, .tint { transition: none; }
+    .modal, .modal.open { transform: translate(-50%, -50%); }
+  }
+</style>
+
+<script>
+  // MapLibre 6 ships ES modules with named exports only; there is no default.
+  import * as maplibregl from 'maplibre-gl';
+  /* MapLibre 6 finds its web worker relative to its own module, as
+     `new URL('./maplibre-gl-worker.mjs', import.meta.url)` with the name built
+     at runtime — so Vite cannot see it, does not emit it, and once MapLibre is
+     folded into this page's bundle the file it looks for is simply not there.
+     The map then never loads and says only "Worker failed to load". Vite is
+     asked to build the worker itself, with the shared chunk it imports, as an
+     ES-module worker (astro.config.mjs sets the format), and MapLibre is told
+     where it went. */
+  import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
+  maplibregl.setWorkerUrl(workerUrl);
+  import 'maplibre-gl/dist/maplibre-gl.css';
+  import { mapStyle, C } from '@lib/mapstyle';
+  import { waterColour, metres } from '@lib/water';
+  import { slopes, valueAt, type Pt } from '@lib/curve';
+
+  type P = {
+    line: [number, number, number][]; coast: number; people: number;
+    settlements: { name: string; km: number; pop: number; on: boolean; ll: [number, number] }[];
+    sites: { name: string; km: number; ll: [number, number] }[];
+    dams: { name: string; km: number; ll: [number, number] }[];
+    measures: Record<string, { km: number; v: number; site: string }[]>;
+    base: { n: number; p: number; c: number; site: string; cSite: string };
+    lastKm: number;
+    reaches: { name: string; span: string; from: number; to: number }[];
+    notes: { km: number; eyebrow: string; title: string; body: string[]; sources: { label: string; href: string }[] }[];
+    summit: [number, number]; sourceM: number;
+    upperNames: [number, number, string][];
+    home: string;
+  };
+  const P: P = JSON.parse(document.querySelector('[data-payload]')!.textContent!);
+  const $ = <T extends Element = HTMLElement>(s: string) => document.querySelector<T>(s)!;
+
+  // ── The line, and where on it a kilometre is ─────────────────────────────
+  const L = P.line;
+  const K0 = L[0][2], K1 = L[L.length - 1][2];
+  function at(km: number): [number, number] {
+    km = Math.max(K0, Math.min(K1, km));
+    let lo = 0, hi = L.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (L[m][2] <= km) lo = m; else hi = m; }
+    const a = L[lo], b = L[hi];
+    const t = b[2] === a[2] ? 0 : (km - a[2]) / (b[2] - a[2]);
+    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  }
+  /** Compass bearing of travel, from a little behind to a little ahead, so a
+   *  tight bend does not swing the framing. The map itself never turns. */
+  function heading(km: number): number {
+    const a = at(km - 1.2), b = at(km + 2.8);
+    const k = Math.cos((a[1] * Math.PI) / 180);
+    return (Math.atan2((b[0] - a[0]) * k, b[1] - a[1]) * 180) / Math.PI;
+  }
+
+  /* The pace and the zoom, by kilometre. Slow over the lake and through Huka,
+     fast through the hydro lakes where nobody lives, slow again through Cambridge
+     and Hamilton where most of the river's people are, then out to sea. The
+     schedule is the edit; the river is not. */
+  const lerpTable = (t: [number, number][]) => (km: number) => {
+    if (km <= t[0][0]) return t[0][1];
+    for (let i = 1; i < t.length; i++) if (km <= t[i][0]) {
+      const [a, va] = t[i - 1], [b, vb] = t[i];
+      return va + ((km - a) / (b - a)) * (vb - va);
+    }
+    return t[t.length - 1][1];
+  };
+  /* From the source the camera opens wide enough to hold the summit and its
+     ice, closes in on the streams off the mountain, opens right out across the
+     lake, and comes down close on the outlet, where the measuring begins. */
+  const zoomAt = lerpTable([[K0, 12.4], [2.5, 13.2], [8, 13.3], [60, 13.1], [66, 12.4], [70, 11.2], [98, 11.4],
+    [102, 13.2], [104.3, 14.8], [105.2, 15], [106.5, 14.6], [108, 14.2], [118, 13.6], [125, 13], [285, 13],
+    [296, 13.6], [312, 14], [340, 14], [348, 13.4], [360, 13], [425, 13], [438, 13.4], [P.coast, 13], [K1, 11.4]]);
+  /* Kilometres a second. The table is the shape of the pace; PACE scales the
+     whole of it. Halved on 2026-10-06 — at full table speed the journey took
+     2 min 40 s and the owner found it far too fast. Ruapehu to Taupō then
+     went quicker again, being a long way to come before anything is
+     measured, and the open lake quickest of all. The stops aside, it is about
+     six minutes from the source to the sea. */
+  const PACE = 0.5;
+  const speedTable = lerpTable([[K0, 0.6], [1.5, 1.8], [5, 3.8], [60, 3.8], [66, 4.4], [69, 8], [99, 8],
+    [102.5, 2.2], [104.5, 0.7], [106, 0.9], [118, 1.4], [125, 3.2], [280, 3.2], [296, 1.6],
+    [312, 1.1], [340, 1.1], [348, 1.8], [360, 2.8], [425, 2.8], [440, 1.4], [K1, 1.0]]);
+  const speedAt = (km: number) => speedTable(km) * PACE;
+
+  // ── The colour of the water, by kilometre ─────────────────────────────────
+  /* Clarity is measured at sites; the colour drawn between them blends in
+     log-clarity from one site's reading to the next. It is the one thing on
+     the page that is drawn across a gap, and it is a colour, not a number —
+     lib/water.ts and the sources page say so. Above the first clarity site the
+     lake takes that site's colour.
+
+     Below the last site, Tuakau, nobody measures, and the line keeps Tuakau's
+     colour to the sea, drawn like the rest. It used to fade to grey for
+     "unmeasured", and on this dark map grey reads as near-white: the river
+     appeared to run clear into Port Waikato, which nobody who has been there
+     would recognise and nothing in the data suggests. A dashed line came next
+     and was dropped by the owner as fussier than it needed to be; the chart's
+     hatching and the panel ("nobody measures here") already say it. */
+  const CL = P.measures.clarity;
+  function colourAt(km: number): string {
+    if (km <= CL[0].km) return waterColour(CL[0].v);
+    const last = CL[CL.length - 1];
+    if (km >= last.km) return waterColour(last.v);
+    let i = 1; while (CL[i].km < km) i++;
+    const a = CL[i - 1], b = CL[i];
+    const t = (km - a.km) / (b.km - a.km);
+    return waterColour(Math.exp(Math.log(a.v) + (Math.log(b.v) - Math.log(a.v)) * t));
+  }
+
+  /* The river as pieces about a kilometre long, each carrying its colour, so
+     the line can be coloured by data rather than by a gradient texture that
+     would blur the travelled line's end. */
+  const CHUNK = 1;
+  const chunks: { from: number; to: number; coords: number[][]; c: string }[] = [];
+  {
+    let cur: number[][] = [[L[0][0], L[0][1]]], start = L[0][2];
+    for (let i = 1; i < L.length; i++) {
+      cur.push([L[i][0], L[i][1]]);
+      if (L[i][2] - start >= CHUNK || i === L.length - 1) {
+        chunks.push({ from: start, to: L[i][2], coords: cur, c: colourAt((start + L[i][2]) / 2) });
+        cur = [[L[i][0], L[i][1]]]; start = L[i][2];
+      }
+    }
+  }
+  const chunkFeatures = (list: typeof chunks) => ({
+    type: 'FeatureCollection' as const,
+    features: list.map((k) => ({ type: 'Feature' as const, properties: { c: k.c },
+      geometry: { type: 'LineString' as const, coordinates: k.coords } })),
+  });
+
+  // ── The map ───────────────────────────────────────────────────────────────
+  const map = new maplibregl.Map({
+    container: $<HTMLElement>('[data-map]'),
+    style: mapStyle(),
+    center: L[0].slice(0, 2) as [number, number],
+    zoom: 16, bearing: 0, pitch: 0,
+    interactive: false,
+    attributionControl: false,
+    fadeDuration: 0,
+  });
+  /* The tile source's own TileJSON names OpenFreeMap, OpenMapTiles and
+     OpenStreetMap, so the control needs nothing added — a custom line here
+     printed every credit twice. */
+  map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+
+  const lineFeature = (coords: number[][]) => ({
+    type: 'Feature' as const, properties: {}, geometry: { type: 'LineString' as const, coordinates: coords },
+  });
+  /* The travelled line is the finished pieces, which change once a kilometre,
+     and the piece the boat is in, which changes every frame. */
+  let doneCount = -1;
+  function travelled(km: number) {
+    const done = chunks.findIndex((k) => k.to > km);
+    const n = done < 0 ? chunks.length : done;
+    if (n !== doneCount) {
+      doneCount = n;
+      (map.getSource('travelled') as maplibregl.GeoJSONSource).setData(chunkFeatures(chunks.slice(0, n)));
+    }
+    const k = chunks[n];
+    const head: number[][] = [];
+    if (k) {
+      head.push(at(k.from));
+      for (const v of L) { if (v[2] > k.from && v[2] < km) head.push([v[0], v[1]]); }
+      head.push(at(km));
+    }
+    const c = colourAt(km);
+    (map.getSource('head') as maplibregl.GeoJSONSource).setData({ ...lineFeature(head.length > 1 ? head : [at(km), at(km)]), properties: { c } });
+    (map.getSource('boat') as maplibregl.GeoJSONSource).setData({ type: 'Feature', properties: { c }, geometry: { type: 'Point', coordinates: at(km) } });
+  }
+
+  let ready = false;
+  map.on('error', (e) => console.error('map error', e?.error?.message ?? e));
+  map.on('load', () => {
+    map.addSource('route', { type: 'geojson', data: chunkFeatures(chunks) });
+    map.addSource('travelled', { type: 'geojson', data: chunkFeatures([]) });
+    map.addSource('head', { type: 'geojson', data: lineFeature([at(K0), at(K0)]) });
+    map.addSource('boat', { type: 'geojson', data: { type: 'Feature', properties: { c: colourAt(K0) }, geometry: { type: 'Point', coordinates: at(K0) } } });
+    map.addSource('towns', { type: 'geojson', data: {
+      type: 'FeatureCollection',
+      features: P.settlements.map((s) => ({ type: 'Feature', properties: { pop: s.pop, on: s.on ? 1 : 0 },
+        geometry: { type: 'Point', coordinates: s.ll } })),
+    } });
+    map.addSource('sites', { type: 'geojson', data: {
+      type: 'FeatureCollection',
+      features: P.sites.map((s) => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: s.ll } })),
+    } });
+
+    const w = (a: number, b: number) => ['interpolate', ['exponential', 1.6], ['zoom'], 10, a, 16, b] as unknown as number;
+    map.addLayer({ id: 'route-glow', type: 'line', source: 'route',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': ['get', 'c'], 'line-opacity': 0.1, 'line-width': w(6, 26), 'line-blur': 6 } });
+    map.addLayer({ id: 'route', type: 'line', source: 'route',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': ['get', 'c'], 'line-opacity': 0.32, 'line-width': w(1, 3.4) } });
+
+    /* People as gold discs, area proportional to population — so Hamilton is
+       not ten times Huntly's size on the map but the right one, and the eye
+       reads the share before the number. */
+    map.addLayer({ id: 'towns', type: 'circle', source: 'towns',
+      paint: {
+        /* Held near-constant as the camera pulls back, rather than shrinking
+           with the map: in the closing frame the discs ARE the picture, and
+           Hamilton has to read as most of the river's people at a glance. */
+        /* `zoom` may only feed a TOP-LEVEL interpolate. Nested inside the
+           multiplication, the expression fails validation and MapLibre drops
+           the whole layer without a word — the discs simply never appeared.
+           So the population term is repeated at each stop instead. */
+        'circle-radius': ['interpolate', ['linear'], ['zoom'],
+          7, ['*', ['sqrt', ['get', 'pop']], 0.075],
+          10, ['*', ['sqrt', ['get', 'pop']], 0.07],
+          13, ['*', ['sqrt', ['get', 'pop']], 0.11],
+          16, ['*', ['sqrt', ['get', 'pop']], 0.24]],
+        'circle-color': ['case', ['==', ['get', 'on'], 1], C.people, C.muted],
+        'circle-opacity': ['case', ['==', ['get', 'on'], 1], 0.26, 0.08],
+        'circle-stroke-color': ['case', ['==', ['get', 'on'], 1], C.people, C.muted],
+        'circle-stroke-width': 1.2,
+        'circle-stroke-opacity': ['case', ['==', ['get', 'on'], 1], 0.85, 0.4],
+        'circle-pitch-alignment': 'map',
+      } });
+
+    for (const src of ['travelled', 'head']) {
+      map.addLayer({ id: `${src}-glow`, type: 'line', source: src,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': ['get', 'c'], 'line-opacity': 0.32, 'line-width': w(7, 22), 'line-blur': 5 } });
+      map.addLayer({ id: src, type: 'line', source: src,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': ['get', 'c'], 'line-opacity': 0.95, 'line-width': w(2, 4.6) } });
+    }
+
+    map.addLayer({ id: 'sites', type: 'circle', source: 'sites',
+      paint: { 'circle-radius': w(3, 6), 'circle-color': C.deep, 'circle-stroke-color': '#bfe9ee', 'circle-stroke-width': 1.6 } });
+
+    map.addLayer({ id: 'boat-halo', type: 'circle', source: 'boat',
+      paint: { 'circle-radius': 20, 'circle-color': ['get', 'c'], 'circle-opacity': 0.26, 'circle-blur': 0.9 } });
+    map.addLayer({ id: 'boat', type: 'circle', source: 'boat',
+      paint: { 'circle-radius': 7, 'circle-color': '#ffffff', 'circle-stroke-color': ['get', 'c'], 'circle-stroke-width': 3 } });
+
+    /* Words on the map in the site's own type, as HTML: tile labels are all off
+       (lib/mapstyle.ts), so these are the only words the reader sees there. */
+    for (const s of P.settlements) {
+      const el = document.createElement('div');
+      el.className = `town${s.on ? '' : ' off'}`;
+      /* Big towns are named at any zoom; small ones and the ones the rule
+         leaves out only close to. Pulled back to the whole river, thirty-nine
+         labels in a strip 300 km long is a smear. */
+      el.dataset.minzoom = String(!s.on ? 11 : s.pop >= 5000 ? 0 : 10.5);
+      el.innerHTML = `<span class="n">${s.name}</span><span class="p">${s.pop.toLocaleString('en-GB')}${s.on ? '' : ' · not counted'}</span>`;
+      new maplibregl.Marker({ element: el, anchor: 'left', offset: [14, 0] }).setLngLat(s.ll).addTo(map);
+    }
+    for (const s of P.sites) {
+      const el = document.createElement('div');
+      el.className = 'site-tag';
+      el.dataset.minzoom = '11.5';
+      el.textContent = s.name;
+      new maplibregl.Marker({ element: el, anchor: 'right', offset: [-10, 0] }).setLngLat(s.ll).addTo(map);
+    }
+    for (const d of P.dams) {
+      const el = document.createElement('div');
+      el.className = 'dam-tag';
+      el.dataset.minzoom = '11.5';
+      el.textContent = `${d.name} dam`;
+      new maplibregl.Marker({ element: el, anchor: 'right', offset: [-10, 14] }).setLngLat(d.ll).addTo(map);
+    }
+
+    /* The mountain, and where on it the river starts. */
+    {
+      const peak = document.createElement('div');
+      peak.className = 'peak';
+      peak.dataset.minzoom = '0';
+      peak.innerHTML = '<span class="n">Ruapehu</span>';
+      new maplibregl.Marker({ element: peak, anchor: 'bottom', offset: [0, -6] }).setLngLat(P.summit).addTo(map);
+      const src = document.createElement('div');
+      src.className = 'site-tag source-tag';
+      src.dataset.minzoom = '11';
+      src.textContent = `Source · ${P.sourceM.toLocaleString('en-GB')} m`;
+      new maplibregl.Marker({ element: src, anchor: 'left', offset: [12, 0] }).setLngLat(L[0].slice(0, 2) as [number, number]).addTo(map);
+    }
+
+    const labels = [...document.querySelectorAll<HTMLElement>('[data-minzoom]')];
+    const lod = () => { const z = map.getZoom(); for (const el of labels) el.style.visibility = z >= Number(el.dataset.minzoom) ? 'visible' : 'hidden'; };
+    map.on('zoom', lod);
+    lod();
+
+    /* The map credit shows when the map first appears, then folds into its
+       "i" after five seconds — the OSM Foundation's attribution guidelines
+       allow exactly that, provided the "i" stays to open it again. */
+    window.setTimeout(() => {
+      map.getContainer().querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
+    }, 5000);
+
+    ready = true;
+    $('[data-loading]').hidden = true;
+    render(true);
+    // The map is drawn; the first card fades in over it.
+    /* The opening card fades in and the boat sets off underneath it: the
+       mountain and the Tongariro are a long way to come before anything is
+       measured, so they go by while the card is read. */
+    window.setTimeout(() => {
+      if (open || playing || km > K0 + 0.01) return;
+      showModal('intro', intro);
+      setPlaying(true);
+    }, reduced ? 0 : 400);
+  });
+
+  // ── The panel ─────────────────────────────────────────────────────────────
+  const fig = $('[data-clarity]') as HTMLElement;
+  const fx0 = Number(fig.dataset.x0), fx1 = Number(fig.dataset.x1);
+  const fl = Number(fig.dataset.l), fr = Number(fig.dataset.r);
+  const series = JSON.parse(fig.querySelector('[data-series]')!.textContent!) as {
+    nitrogen: [number, number][]; phosphorus: [number, number][]; clarity: [number, number][];
+    lastKm: number; surf: number; ht: number; hb: number; nMax: number; cMax: number;
+  };
+  const clip = fig.querySelector<SVGRectElement>('[data-clip]')!;
+  const cursor = fig.querySelector<SVGLineElement>('[data-cursor] line')!;
+  const dotN = fig.querySelector<SVGCircleElement>('[data-dot="nitrogen"]')!;
+  const dotP = fig.querySelector<SVGCircleElement>('[data-dot="phosphorus"]')!;
+  const disc = fig.querySelector<SVGGElement>('[data-disc]')!;
+  const cx = (km: number) => fl + ((Math.min(fx1, Math.max(fx0, km)) - fx0) / (fx1 - fx0)) * (fr - fl);
+  const yN = (v: number) => series.surf - (v / series.nMax) * series.ht;
+  const yC = (m: number) => series.surf + (Math.min(m, series.cMax) / series.cMax) * series.hb;
+  /* The dots ride the same curves the chart draws. */
+  const curveOf = (p: Pt[]) => { const m = slopes(p); return (km: number) => valueAt(p, m, km); };
+  const nAt = curveOf(series.nitrogen), pAt = curveOf(series.phosphorus), cAt = curveOf(series.clarity);
+
+  const lastAt = <T extends { km: number }>(arr: T[], km: number) => { let r: T | null = null; for (const x of arr) { if (x.km <= km) r = x; else break; } return r; };
+
+  function panel(km: number) {
+    const kmText = km > P.coast ? 'At sea' : String(Math.floor(km));
+    $('[data-km]').textContent = kmText;
+
+    /* The nearest town either side, not the last one passed: the boat is in
+       Hamilton's southern suburbs well before it reaches the city's centre. */
+    const near = P.settlements.filter((s) => s.on).reduce<(typeof P.settlements)[number] | null>(
+      (best, s) => (!best || Math.abs(s.km - km) < Math.abs(best.km - km) ? s : best), null);
+    /* Above the lake, OpenStreetMap's own names for the water the boat is on;
+       before the first named stream, the mountain. */
+    const upper = P.upperNames.find(([a, b]) => km >= a && km <= b);
+    const place = km > P.coast ? 'The Tasman Sea' : km < P.upperNames[0][0] ? 'Ruapehu'
+      : upper ? upper[2] : km < 106 ? 'Lake Taupō'
+      : near && Math.abs(near.km - km) < 6 ? near.name : 'Waikato River';
+    $('[data-place]').textContent = place;
+    $('[data-readout]').textContent = `${place} · ${km > P.coast ? 'past the mouth' : `km ${Math.floor(km)}`}`;
+
+    /* The water here: the last site at or upstream of the boat, every figure
+       from that one site, named — never a value carried from somewhere else.
+       Past the last site the figures stay on it and say so. */
+    const site = lastAt(P.measures.total_nitrogen, km);
+    const read = (k: string) => site ? P.measures[k].find((x) => x.site === site.site) ?? null : null;
+    const n = read('total_nitrogen'), ph = read('total_phosphorus');
+    /* The gates have no clarity record; Reids Farm, 900 m on, is the first. */
+    const c = read('clarity') ?? lastAt(P.measures.clarity, km);
+    $('[data-n]').textContent = n ? `×${(n.v / P.base.n).toFixed(1)}` : '—';
+    $('[data-n-sub]').textContent = n ? `${n.v.toFixed(2)} mg/L` : 'not yet measured';
+    $('[data-p]').textContent = ph ? `×${(ph.v / P.base.p).toFixed(1)}` : '—';
+    $('[data-p-sub]').textContent = ph ? `${ph.v.toFixed(3)} mg/L` : 'not yet measured';
+    const cEl = $('[data-c]');
+    cEl.textContent = c ? metres(c.v) : '—';
+    cEl.style.color = c ? waterColour(c.v) : '';
+    $('[data-c-sub]').textContent = c ? `from ${P.base.c.toFixed(1)} m` : 'not yet measured';
+    $('[data-site]').textContent = !site ? 'Nothing is measured above the Taupō gates'
+      : km > P.lastKm + 0.5 ? `Last measured at ${site.site}, km ${Math.round(site.km)} · nobody measures here`
+      : `Measured at ${site.site} · km ${Math.round(site.km)}`;
+
+    // The chart: uncover what has been travelled, and put the cursor on it.
+    const x = cx(km), xd = x;
+    clip.setAttribute('width', String(x));
+    cursor.setAttribute('x1', String(x)); cursor.setAttribute('x2', String(x));
+    const sn = nAt(km), sp = pAt(km), sc = cAt(km);
+    dotN.setAttribute('cx', String(xd)); dotN.setAttribute('cy', String(yN(sn)));
+    dotP.setAttribute('cx', String(xd)); dotP.setAttribute('cy', String(yN(sp)));
+    disc.setAttribute('transform', `translate(${xd} ${yC(sc)})`);
+
+    // A reach's verdict appears when the boat leaves it, not before.
+    P.reaches.forEach((r, i) => { $(`[data-verdict="${i}"]`).hidden = km < r.to - 0.01; });
+    const cur = P.reaches.findIndex((r) => km < r.to);
+    const pend = $('[data-pending]');
+    pend.hidden = cur < 0;
+    if (cur >= 0) pend.textContent = `Now: ${P.reaches[cur].name} · ${P.reaches[cur].span}`;
+
+    const frac = (km - K0) / (K1 - K0);
+    ($('[data-progress]') as HTMLElement).style.width = `${(frac * 100).toFixed(2)}%`;
+    ($('[data-thumb]') as HTMLElement).style.left = `${(frac * 100).toFixed(2)}%`;
+    $('[data-pct]').textContent = `${Math.round(frac * 100)}%`;
+    const bar = $('[data-scrub]');
+    bar.setAttribute('aria-valuenow', String(Math.round(frac * 100)));
+    bar.setAttribute('aria-valuetext', `${place}, ${km > P.coast ? 'past the mouth' : `kilometre ${Math.floor(km)}`}`);
+  }
+
+
+  // ── Motion ────────────────────────────────────────────────────────────────
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let km = K0, playing = false, last = 0, dir = 0, zoom = 16;
+  /* 0 to 1: how far into pulling away the boat is. Every start — the first,
+     after a stop, after a pause — eases up from rest rather than jumping to
+     speed. */
+  let accel = 1;
+  const ACCEL_S = 2.2;   // seconds from rest to full pace
+  const BRAKE_S = 2.6;   // seconds from full pace to rest, arriving at a stop
+
+  /* What of the map the panel leaves visible: on a wide screen the panel is
+     down the right; on a phone it is a sheet along the bottom. */
+  function visible() {
+    const el = $('[data-map]');
+    const w = el.clientWidth, h = el.clientHeight;
+    const panel = $('.panel').getBoundingClientRect();
+    if (w <= 760) return { w, h, top: 0, bottom: Math.min(h * 0.55, panel.height + 20), left: 0, right: 0 };
+    return { w, h, top: 0, bottom: 0, left: 0, right: Math.min(w * 0.5, panel.width + 28) };
+  }
+
+  /* Where on screen the boat sits. North is always up, so the map cannot turn
+     to put the river ahead at the top. Instead the boat is set back from the
+     middle of the visible map, opposite the way it is heading — low when the
+     river runs north, to the right when it runs west — so the view is mostly
+     of the river still to come. Done with padding, which moves the point
+     MapLibre centres on without moving the map. */
+  function framing(heading: number) {
+    const v = visible();
+    const vw = v.w - v.left - v.right, vh = v.h - v.top - v.bottom;
+    const rad = (heading * Math.PI) / 180;
+    const bx = v.left + vw / 2 - Math.sin(rad) * vw * 0.26;
+    const by = v.top + vh / 2 + Math.cos(rad) * vh * 0.26;
+    const right = Math.max(0, v.w - 2 * bx), bottom = Math.max(0, v.h - 2 * by);
+    return { left: 2 * bx - v.w + right, right, top: 2 * by - v.h + bottom, bottom };
+  }
+
+  /* The ending. Out at sea the camera lets go of the boat and pulls back,
+     north up, until the whole river is in view: every town's people as its
+     disc, the travelled line end to end. It is the one frame that shows the
+     argument on the map itself rather than in the panel. */
+  let finale = false;
+  function pullBack() {
+    finale = true;
+    const xs = L.map((v) => v[0]), ys = L.map((v) => v[1]);
+    /* Not fitBounds: it adds the padding already on the camera — the boat's
+       framing — to the padding asked for, and on a phone the sum is taller
+       than the screen and the map pulls back to the whole planet. So the
+       camera is worked out here, at the current zoom, and eased to. */
+    const v = visible();
+    const sw = map.project([Math.min(...xs), Math.min(...ys)]), ne = map.project([Math.max(...xs), Math.max(...ys)]);
+    const room = { w: v.w - v.left - v.right - 80, h: v.h - v.top - v.bottom - 80 };
+    const zoomTo = map.getZoom() + Math.log2(Math.min(room.w / Math.abs(ne.x - sw.x), room.h / Math.abs(ne.y - sw.y)));
+    map.easeTo({
+      center: map.unproject([(sw.x + ne.x) / 2, (sw.y + ne.y) / 2]), zoom: zoomTo, bearing: 0,
+      padding: { top: v.top + 40, bottom: v.bottom + 40, left: v.left + 40, right: v.right + 40 },
+      duration: reduced ? 0 : 4200, essential: true,
+    });
+  }
+
+  function render(snap = false) {
+    if (!ready) return;
+    if (finale) { panel(km); return; }
+    /* The heading only decides where the boat sits in the frame, and is eased
+       so a bend in the river drifts the view rather than jolting it. */
+    const target = heading(km);
+    const d = ((target - dir + 540) % 360) - 180;
+    dir = snap || reduced ? target : dir + d * 0.02;
+    const zt = zoomAt(km);
+    zoom = snap || reduced ? zt : zoom + (zt - zoom) * 0.06;
+    map.jumpTo({ center: at(km), zoom, bearing: 0, padding: framing(dir) });
+    travelled(km);
+    panel(km);
+  }
+
+  function tick(now: number) {
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    if (playing && ready) {
+      const base = speedAt(km);
+      accel = reduced ? 1 : Math.min(1, accel + dt / ACCEL_S);
+      let v = base * accel * accel * (3 - 2 * accel);
+      const stop = stops[nextStop];
+      if (stop) {
+        /* Constant deceleration into the stop: the fastest the boat can be
+           going and still come to rest exactly on it is √(2ad). Below that
+           curve it sails on as normal; on it, it slows to a halt. */
+        const d = stop.km - km;
+        if (!reduced) v = Math.min(v, Math.sqrt(2 * (base / BRAKE_S) * Math.max(0, d)));
+        if (d <= v * dt + 1e-4) arrive(stop);
+        else km += v * dt;
+      } else {
+        km = Math.min(K1, km + v * dt);
+        if (km >= K1) { setPlaying(false); pullBack(); }
+      }
+    }
+    countdown(now);
+    render();
+    requestAnimationFrame(tick);
+  }
+
+  const playBtn = $<HTMLButtonElement>('[data-play]');
+  function setPlaying(v: boolean) {
+    if (v && km >= K1) { restart(); return; }
+    if (v && !playing) { last = performance.now(); accel = 0; }
+    playing = v;
+    playBtn.textContent = v ? '❚❚' : km >= K1 ? '↺' : '▶';
+    playBtn.setAttribute('aria-label', v ? 'Pause' : km >= K1 ? 'Sail again' : 'Play');
+  }
+  playBtn.addEventListener('click', () => setPlaying(!playing));
+
+  // ── The stops ─────────────────────────────────────────────────────────────
+  /* Every chapter downstream of where the boat sets off is a stop. The ones
+     upstream of it — Ruapehu, and the lake the boat starts on — are read
+     together before it leaves, behind "Begin the journey". */
+  type Note = P['notes'][number];
+  const intro = P.notes.filter((n) => n.km <= K0 + 0.01);
+  const stops = P.notes.filter((n) => n.km > K0 + 0.01);
+  let nextStop = 0;
+  const nextAfter = (k: number) => { const i = stops.findIndex((s) => s.km > k + 0.01); return i < 0 ? stops.length : i; };
+
+  const modal = $('[data-modal]'), scrim = $('[data-scrim]'), modalBody = $('[data-modal-body]');
+  const goBtn = $<HTMLButtonElement>('[data-go]'), goLabel = $('[data-go-label]');
+  const timer = $('[data-timer]'), timerFill = $('[data-timer-fill]');
+  const autoBox = $<HTMLInputElement>('[data-autoplay]');
+  /* Everything behind the card is inert while it is up: no tabbing to the map
+     or the bar behind it. */
+  const behind = ['.bar.top', '.stage', '.bar.controls'].map((q) => $(q));
+  let open: null | 'intro' | 'stop' = null;
+  let arrival = 0;
+
+  /* Autoplay is a reader's preference, so it is remembered in their browser
+     only, and the page works the same when storage is unavailable. */
+  let autoplay = false;
+  try { autoplay = localStorage.getItem('journey-autoplay') === '1'; } catch { /* private window */ }
+  autoBox.checked = autoplay;
+  const AUTO_MS = 10_000;
+  let autoLeft = 0, autoLast = 0, hovering = false;
+
+  function fill(notes: Note[]) {
+    modalBody.replaceChildren(...notes.map((n, i) => {
+      const sec = document.createElement('section');
+      sec.className = 'ch';
+      const eb = document.createElement('p');
+      eb.className = 'ch-eyebrow';
+      eb.textContent = n.eyebrow;
+      const h = document.createElement('h2');
+      h.textContent = n.title;
+      if (i === 0) h.id = 'modal-title';
+      sec.append(eb, h, ...n.body.map((t) => {
+        const p = document.createElement('p');
+        p.className = 'ch-p';
+        // `**words**` in a passage is bold; everything else is text.
+        t.split(/\*\*(.+?)\*\*/).forEach((part, k) => {
+          if (k % 2) { const b = document.createElement('strong'); b.textContent = part; p.append(b); }
+          else if (part) p.append(part);
+        });
+        return p;
+      }));
+      if (n.sources.length) {
+        const src = document.createElement('p');
+        src.className = 'ch-src';
+        src.append(n.sources.length > 1 ? 'Sources: ' : 'Source: ');
+        n.sources.forEach((x, j) => {
+          if (j) src.append(' · ');
+          const a = document.createElement('a');
+          a.href = x.href; a.rel = 'noopener'; a.target = '_blank'; a.textContent = x.label;
+          src.append(a);
+        });
+        sec.append(src);
+      }
+      return sec;
+    }));
+    modalBody.scrollTop = 0;
+  }
+
+  function startCountdown() {
+    autoLeft = open === 'stop' && autoplay ? AUTO_MS : 0;
+    autoLast = performance.now();
+    timer.classList.toggle('on', autoLeft > 0);
+    timerFill.style.transform = 'scaleX(1)';
+  }
+  /* Ten seconds, held while a mouse is over the card so nobody loses a
+     paragraph halfway through it. */
+  function countdown(now: number) {
+    if (open !== 'stop' || autoLeft <= 0) { autoLast = now; return; }
+    if (!hovering) autoLeft -= now - autoLast;
+    autoLast = now;
+    timerFill.style.transform = `scaleX(${Math.max(0, autoLeft / AUTO_MS)})`;
+    if (autoLeft <= 0) proceed();
+  }
+
+  /* What changes with the card's content: its button, its tint, its countdown,
+     and how dark the stage behind it is. The opening card is read while the
+     boat is already coming off the mountain, so it dims the map only lightly. */
+  function dress(kind: 'intro' | 'stop', notes: Note[]) {
+    $('[data-tint]').style.background = colourAt(Math.max(K0, notes[notes.length - 1].km));
+    goLabel.textContent = kind === 'intro' ? 'Begin the journey' : 'Continue the journey';
+    scrim.classList.toggle('light', kind === 'intro');
+    startCountdown();
+  }
+  function showModal(kind: 'intro' | 'stop', notes: Note[]) {
+    open = kind;
+    fill(notes);
+    dress(kind, notes);
+    for (const el of behind) el.inert = true;
+    modal.setAttribute('aria-hidden', 'false');
+    scrim.classList.add('open');
+    modal.classList.add('open');
+    goBtn.focus({ preventScroll: true });
+  }
+  /* One card giving way to the next without closing: the words fade out, the
+     card eases to its new height, and the new words fade in. Used when the
+     boat reaches a stop while the opening card is still up. */
+  let swapping = 0;
+  function swapModal(kind: 'intro' | 'stop', notes: Note[]) {
+    open = kind;
+    const h0 = modal.offsetHeight;
+    modal.style.height = `${h0}px`;
+    modal.classList.add('fading');
+    clearTimeout(swapping);
+    swapping = window.setTimeout(() => {
+      fill(notes);
+      dress(kind, notes);
+      modal.style.height = 'auto';
+      const h1 = modal.offsetHeight;
+      modal.style.height = `${h0}px`;
+      void modal.offsetHeight;
+      modal.style.height = `${h1}px`;
+      modal.classList.remove('fading');
+      goBtn.focus({ preventScroll: true });
+      swapping = window.setTimeout(() => { modal.style.height = ''; }, reduced ? 0 : 600);
+    }, reduced ? 0 : 380);
+  }
+  function hideModal() {
+    clearTimeout(arrival);
+    clearTimeout(swapping);
+    modal.classList.remove('fading');
+    modal.style.height = '';
+    if (!open) return;
+    open = null;
+    autoLeft = 0;
+    timer.classList.remove('on');
+    for (const el of behind) el.inert = false;
+    modal.setAttribute('aria-hidden', 'true');
+    scrim.classList.remove('open');
+    modal.classList.remove('open');
+  }
+  /* The button: the card fades out and the boat pulls away together. */
+  function proceed() {
+    if (!open) return;
+    hideModal();
+    setPlaying(true);
+    playBtn.focus({ preventScroll: true });
+  }
+  /* Arriving: the boat has braked to rest on the place. A beat for the camera
+     to settle, then the card fades in. */
+  function arrive(stop: Note) {
+    km = stop.km;
+    nextStop++;
+    setPlaying(false);
+    clearTimeout(arrival);
+    // Still reading the opening card: it turns into this one where it stands.
+    if (open) { swapModal('stop', [stop]); return; }
+    arrival = window.setTimeout(() => showModal('stop', [stop]), reduced ? 0 : 450);
+  }
+  function restart() {
+    hideModal();
+    finale = false;
+    km = K0;
+    nextStop = 0;
+    render(true);
+    setPlaying(false);
+    showModal('intro', intro);
+    setPlaying(true);
+  }
+
+  goBtn.addEventListener('click', proceed);
+  autoBox.addEventListener('change', () => {
+    autoplay = autoBox.checked;
+    try { localStorage.setItem('journey-autoplay', autoplay ? '1' : '0'); } catch { /* private window */ }
+    // Ticking it on a card that is already up starts that card's ten seconds.
+    if (open === 'stop') startCountdown();
+  });
+  modal.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') hovering = true; });
+  modal.addEventListener('pointerleave', () => { hovering = false; });
+
+  /* Scrubbing. Moving to any point on the bar puts the boat there, map and
+     panel and all. While the bar is held the journey stops; let go, and it
+     carries on if it was going. Let go at the very end and it pulls back as
+     if it had sailed there. */
+  function seekTo(k: number) {
+    hideModal();
+    finale = false;
+    km = Math.max(K0, Math.min(K1, k));
+    // Stops already passed stay passed; the ones ahead of the new place re-arm.
+    nextStop = nextAfter(km);
+    render(true);
+  }
+  function settle(resume: boolean) {
+    if (km >= K1) { setPlaying(false); pullBack(); return; }
+    setPlaying(resume);
+  }
+  const scrub = $('[data-scrub]');
+  const kmAtX = (x: number) => {
+    const r = scrub.getBoundingClientRect();
+    return K0 + Math.max(0, Math.min(1, (x - r.left) / r.width)) * (K1 - K0);
+  };
+  let resumeAfter = false;
+  scrub.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    scrub.setPointerCapture(e.pointerId);
+    scrub.classList.add('dragging');
+    resumeAfter = playing;
+    setPlaying(false);
+    seekTo(kmAtX(e.clientX));
+  });
+  scrub.addEventListener('pointermove', (e) => {
+    if (scrub.hasPointerCapture(e.pointerId)) seekTo(kmAtX(e.clientX));
+  });
+  const release = (e: PointerEvent) => {
+    if (!scrub.classList.contains('dragging')) return;
+    scrub.classList.remove('dragging');
+    if (scrub.hasPointerCapture(e.pointerId)) scrub.releasePointerCapture(e.pointerId);
+    settle(resumeAfter);
+  };
+  scrub.addEventListener('pointerup', release);
+  scrub.addEventListener('pointercancel', release);
+  /* The keyboard, as a slider: arrows by one per cent, Page keys by ten,
+     Home and End to either end. */
+  scrub.addEventListener('keydown', (e) => {
+    const step = { ArrowRight: 0.01, ArrowUp: 0.01, ArrowLeft: -0.01, ArrowDown: -0.01, PageUp: 0.1, PageDown: -0.1 }[e.key];
+    if (step === undefined && e.key !== 'Home' && e.key !== 'End') return;
+    e.preventDefault();
+    const was = playing;
+    setPlaying(false);
+    seekTo(e.key === 'Home' ? K0 : e.key === 'End' ? K1 : km + step! * (K1 - K0));
+    settle(was);
+  });
+
+  addEventListener('keydown', (e) => {
+    if (e.key === ' ') {
+      // A focused button or box answers Space itself.
+      if (e.target instanceof Element && e.target.closest('button, input, a')) return;
+      e.preventDefault();
+      if (open) proceed(); else setPlaying(!playing);
+    }
+    if (e.key === 'Escape') { if (open) proceed(); else location.href = P.home; }
+  });
+
+  requestAnimationFrame((t) => { last = t; tick(t); });
+  (window as unknown as { __journey: unknown }).__journey = {
+    seek(k: number) { setPlaying(false); seekTo(k); },
+    get open() { return open; },
+    finish() { finale = false; km = K1; render(true); setPlaying(false); pullBack(); },
+    get km() { return km; },
+    /* For diagnosis from the console: the map instance itself. */
+    get map() { return map; },
+  };
+</script>

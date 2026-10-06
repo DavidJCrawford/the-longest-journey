@@ -1,0 +1,44 @@
+# ─── Build output ────────────────────────────────────────────────────────────
+dist/
+.astro/
+node_modules/
+*.tsbuildinfo
+
+# ─── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# ─── Fetched sources ─────────────────────────────────────────────────────────
+# Raw downloads from the councils, MfE, LAWA and friends. Reproducible by
+# `make fetch`, and some of them are large.
+.cache/
+
+# NOTE: site/data/ is deliberately NOT ignored. Emitted data is committed so the
+# site is always buildable from the repository alone and CI never needs network
+# access to anybody. See Docs/HANDOFF.md.
+
+# ─── Local tooling ───────────────────────────────────────────────────────────
+# Editor and harness config. The preview server config in here points at a
+# machine-specific path, and `make preview` is the portable way to look at the
+# built site anyway. HANDOFF §4: check it against the built output, never
+# against `astro dev`.
+.claude/
+
+# ─── Local environment ───────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Editors and OS ──────────────────────────────────────────────────────────
+.DS_Store
+._*
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~

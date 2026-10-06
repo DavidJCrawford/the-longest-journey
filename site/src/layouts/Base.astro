@@ -1,0 +1,99 @@
+---
+/** The page frame, after F1 Analysis: a wordmark and two links over a hairline,
+ *  then the page. `chrome={false}` drops all of it for the journey, which is a
+ *  full-screen instrument with its own bar, the way F1's replay is. */
+import { Font } from 'astro:assets';
+import { u } from '@lib/url';
+import { SITE_NAME } from '@lib/scope';
+import Logo from '@components/Logo.astro';
+import '@styles/base.css';
+
+interface Props { title: string; description?: string; chrome?: boolean; }
+const {
+  title,
+  description = 'The Waikato River from Ruapehu to the Tasman — who lives on it, and what it carries.',
+  chrome = true,
+} = Astro.props;
+
+const NAV = [
+  { href: '/journey/', label: 'Journey' },
+  { href: '/sources/', label: 'Sources' },
+];
+const path = Astro.url.pathname;
+---
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title === SITE_NAME ? title : `${title} · ${SITE_NAME}`}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content={chrome ? '#f8f8f8' : '#0f0f0f'} />
+    <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
+    <link rel="icon" href={u('/favicon.svg')} type="image/svg+xml" />
+    <link rel="icon" href={u('/favicon-32.png')} type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href={u('/apple-touch-icon.png')} />
+    <Font cssVariable="--ks-font" preload />
+    <Font cssVariable="--ks-font-display" preload />
+    <Font cssVariable="--ks-mono" />
+    <slot name="head" />
+  </head>
+  <body class:list={{ bare: !chrome }}>
+    {chrome && <a class="skip plain" href="#main">Skip to content</a>}
+
+    {chrome && (
+      <header class="masthead">
+        <div class="wrap masthead-inner">
+          <a class="wordmark plain" href={u('/')}><Logo size="1.15em" /><span>{SITE_NAME}</span></a>
+          <nav aria-label="Sections">
+            <ul>
+              {NAV.map((item) => (
+                <li>
+                  <a class="plain nav-link" href={u(item.href)}
+                     aria-current={path.startsWith(u(item.href)) ? 'page' : undefined}>{item.label}</a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </div>
+        <hr class="rule" />
+      </header>
+    )}
+
+    <main id="main"><slot /></main>
+  </body>
+</html>
+
+<style>
+  .skip {
+    position: absolute; left: -9999px; top: 0; z-index: 10;
+    background: var(--ks-ink); color: var(--ks-paper);
+    padding: 10px 16px; border-radius: var(--ks-radius-sm);
+  }
+  .skip:focus { left: 12px; top: 12px; }
+
+  .masthead-inner {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 24px; padding-block: 20px; flex-wrap: wrap;
+  }
+  /* F1 sets its wordmark beside the championship's mark. This site's mark is
+     its own — a circle of the river's water, clear blue to brown (lib/logo.ts);
+     nobody else's emblem is borrowed (HANDOFF §5). */
+  .wordmark {
+    display: inline-flex; align-items: center; gap: .6em;
+    font-size: var(--ks-type-subhead-size);
+    letter-spacing: 0.18em; text-transform: uppercase;
+    font-weight: 500; color: var(--ks-ink);
+  }
+  .masthead-inner { align-items: center; }
+  nav ul { display: flex; gap: clamp(14px, 2vw, 26px); list-style: none; margin: 0; padding: 0; }
+  .nav-link {
+    font-size: var(--ks-type-ui-size); letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ks-text-muted);
+    padding-bottom: 2px; border-bottom: 1px solid transparent;
+  }
+  .nav-link:hover { color: var(--ks-ink); border-bottom-color: var(--ks-kinpaku); }
+  .nav-link[aria-current='page'] { color: var(--ks-ink); border-bottom-color: var(--ks-edge); }
+
+  :global(body.bare) { background: var(--ks-instrument-deep); color-scheme: dark; overflow: hidden; }
+</style>
