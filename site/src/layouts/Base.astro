@@ -20,6 +20,7 @@ const NAV = [
   { href: '/sources/', label: 'Sources' },
 ];
 const path = Astro.url.pathname;
+const AUTHOR_URL = 'https://davidjcrawford.github.io/';
 ---
 <!doctype html>
 <html lang="en-GB">
@@ -61,6 +62,18 @@ const path = Astro.url.pathname;
     )}
 
     <main id="main"><slot /></main>
+
+    {/* Who made it, and where to find out more. Not on the journey, which is
+        a full-screen instrument with its own bars. */}
+    {chrome && (
+      <footer class="site-footer">
+        <hr class="rule" />
+        <div class="wrap footer-inner">
+          <p>Made by <a href={AUTHOR_URL} rel="author">David J Crawford</a></p>
+          <p><a href={AUTHOR_URL}>More about me, and how to get in touch →</a></p>
+        </div>
+      </footer>
+    )}
   </body>
 </html>
 
@@ -94,6 +107,21 @@ const path = Astro.url.pathname;
   }
   .nav-link:hover { color: var(--ks-ink); border-bottom-color: var(--ks-kinpaku); }
   .nav-link[aria-current='page'] { color: var(--ks-ink); border-bottom-color: var(--ks-edge); }
+
+  /* A sticky footer: the page is at least the window's height, the main
+     content takes up the slack, and the footer sits on the bottom edge of the
+     window on a short page and after the content on a long one. It mirrors the
+     masthead: a full-width hairline, then a row in the page's measure. */
+  :global(body:not(.bare)) { min-height: 100dvh; display: flex; flex-direction: column; }
+  :global(body:not(.bare) > main) { flex: 1 0 auto; }
+  .site-footer { flex: none; }
+  .footer-inner {
+    display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap;
+    gap: 6px 24px; padding-block: 14px 16px;
+    font-size: var(--ks-type-ui-size); color: var(--ks-text-muted);
+  }
+  .footer-inner p { margin: 0; }
+  .footer-inner a { color: var(--ks-ink); }
 
   :global(body.bare) { background: var(--ks-instrument-deep); color-scheme: dark; overflow: hidden; }
 </style>
